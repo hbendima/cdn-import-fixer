@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klium · CDN checker import fixer</title>
+<script src="lib/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --klium-blue: #2b2f44;
+    --klium-red: #e01f50;
+    --klium-red-dark: #b8173f;
+    --klium-grey: #6b818b;
+    --klium-petrol: #237ba0;
+    --klium-mint: #b3dcc3;
+    --klium-yellow: #f3d460;
+    --bg: #eef1f4;
+    --panel: #ffffff;
+    --border: #d3dae1;
+    --text: var(--klium-blue);
+    --muted: #51656e;
+    --green: #1f6b45;  --green-bg: #e3f2e9;
+    --amber: #6b5200;  --amber-bg: #fbefc0;
+    --red: #b42318;    --red-bg: #f8e6e4;
+    --info-bg: #e3eff5;
+    --shadow: 0 1px 3px rgba(43,47,68,.10), 0 1px 2px rgba(43,47,68,.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+  header { position: sticky; top: 0; z-index: 20; background: var(--panel); padding: 12px 24px;
+           box-shadow: inset 0 -4px 0 var(--klium-blue), 0 2px 6px rgba(43,47,68,.10); display: flex; align-items: center; gap: 14px; }
+  header::after { content: ""; position: absolute; left: 0; bottom: 0; width: 140px; height: 4px; background: var(--klium-red); }
+  header img { height: 32px; display: block; border-radius: 5px; }
+  header .title { font-size: 18px; font-weight: 700; }
+  header .title small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .badge { margin-left: auto; padding: 4px 10px; border-radius: 999px; background: var(--klium-blue); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 22px 24px 40px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .card h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--klium-grey); display: flex; align-items: center; gap: 8px; }
+  .card h2::before { content: ""; width: 4px; height: 14px; background: var(--klium-red); border-radius: 2px; }
+
+  #drop { border: 2px dashed var(--border); border-radius: 12px; padding: 36px 20px; text-align: center; cursor: pointer; transition: .15s; background: #f8fafb; }
+  #drop:hover { border-color: var(--klium-petrol); background: #f1f7fa; }
+  #drop.over { border-color: var(--klium-red); background: #fdeef2; transform: scale(1.005); }
+  #drop .ico { width: 54px; height: 54px; margin: 0 auto 10px; border-radius: 50%; background: var(--klium-blue); display: grid; place-items: center; }
+  #drop.over .ico { background: var(--klium-red); }
+  #drop .big { font-size: 17px; font-weight: 700; }
+  #drop .hint { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.5; }
+  #drop .hint u { color: var(--klium-petrol); text-decoration: none; font-weight: 600; }
+
+  .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+  .slot { border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 12px 14px; min-height: 84px; position: relative; background: #fff; transition: .15s; }
+  .slot.ok { border-left-color: var(--klium-petrol); background: #f4f9fb; }
+  .slot .t { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .slot .num { width: 22px; height: 22px; border-radius: 50%; background: #e4e7ef; color: var(--klium-blue); font-size: 12px; display: grid; place-items: center; flex: none; }
+  .slot.ok .num { background: var(--klium-petrol); color: #fff; }
+  .slot .f { word-break: break-all; font-size: 12px; margin-top: 8px; color: var(--muted); }
+  .slot.ok .f { color: var(--text); font-weight: 600; }
+  .slot .m { color: var(--klium-grey); font-size: 12px; margin-top: 3px; }
+  .slot .x { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--klium-grey); display: none; font-size: 13px; }
+  .slot .x:hover { color: var(--klium-red); }
+  .slot.ok .x { display: block; }
+
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .stat { position: relative; border: 1px solid var(--border); border-radius: 12px; padding: 16px 14px 12px; background: #fff; overflow: hidden; }
+  .stat::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--klium-petrol); }
+  .stat .n { font-size: 28px; font-weight: 800; line-height: 1.1; }
+  .stat .l { font-size: 11px; font-weight: 700; color: var(--klium-grey); text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  .stat .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat.first { background: var(--klium-blue); border-color: var(--klium-blue); }
+  .stat.first::after { background: var(--klium-red); }
+  .stat.first .n { color: #fff; } .stat.first .l, .stat.first .s { color: #c9d3da; }
+  .stat.g::after { background: var(--klium-mint); } .stat.g .n { color: var(--green); }
+  .stat.r::after { background: var(--klium-red); }  .stat.r .n { color: var(--klium-red); }
+  .stat.o::after { background: var(--klium-yellow); } .stat.o .n { color: var(--amber); }
+
+  button { font: inherit; border: 1px solid var(--border); border-radius: 8px; padding: 9px 16px; cursor: pointer; background: #fff; color: var(--klium-blue); font-weight: 600; transition: .15s; }
+  button:hover { border-color: var(--klium-petrol); color: var(--klium-petrol); }
+  button.primary { background: var(--klium-red); border-color: var(--klium-red); color: #fff; padding: 10px 20px; }
+  button.primary:hover { background: var(--klium-red-dark); border-color: var(--klium-red-dark); color: #fff; }
+  button:disabled, button:disabled:hover { background: #e4e7ef; border-color: #e4e7ef; color: var(--klium-grey); cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  #copied { color: var(--green); font-size: 13px; font-weight: 600; }
+
+  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; border-left: 4px solid; }
+  .msg.err  { background: var(--red-bg);   color: var(--red);   border-color: var(--red); }
+  .msg.warn { background: var(--amber-bg); color: var(--amber); border-color: var(--klium-yellow); }
+  .msg.info { background: var(--info-bg);  color: #1b5f7d;      border-color: var(--klium-petrol); }
+  .msg.ok   { background: var(--green-bg); color: var(--green); border-color: var(--klium-mint); }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { padding: 7px 14px; cursor: pointer; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--klium-blue); border: 1px solid var(--border); background: #fff; }
+  .tab:hover { border-color: var(--klium-petrol); color: var(--klium-petrol); }
+  .tab.active { background: var(--klium-blue); border-color: var(--klium-blue); color: #fff; }
+  .tablewrap { max-height: 460px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 7px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid #e8ecf0; }
+  th { position: sticky; top: 0; background: var(--klium-blue); color: #fff; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #f8fafb; }
+  tbody tr:hover { background: #eef5f9; }
+  td.mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  td.url { max-width: 440px; overflow: hidden; text-overflow: ellipsis; }
+  td.url a { color: var(--klium-petrol); text-decoration: none; }
+  .empty { color: var(--klium-grey); padding: 18px; text-align: center; }
+  .hidden { display: none !important; }
+  footer { text-align: center; color: var(--klium-grey); font-size: 12px; padding-bottom: 20px; }
+  @media (max-width: 900px) { .slots { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <img src="lib/klium-logo.jpg" alt="Klium">
+  <div class="title">CDN checker import fixer
+    <small>Dexis CDN failures → Akeneo · Import profile - asset attribute import (NOT FOR IMAGES IMPORT)</small>
+  </div>
+  <span class="badge">Tools</span>
+</header>
+
+<main>
+<div class="card">
+  <h2>Bestanden</h2>
+  <div id="drop">
+    <div class="ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+    <div class="big">Sleep de 3 bestanden hierin</div>
+    <div class="hint">Dexis CDN failures (.csv) · Akeneo export met labels · Akeneo export met codes (.xlsx of .csv)<br>
+      Alles tegelijk of één voor één – of <u>klik om te bladeren</u></div>
+    <input id="picker" type="file" multiple accept=".csv,.xlsx,.xls" class="hidden">
+  </div>
+  <div class="slots">
+    <div class="slot" id="slot-dexis"><span class="x" data-k="dexis" title="Verwijderen">✕</span><div class="t"><span class="num">1</span>Dexis CDN failures</div><div class="f">Nog niet geladen</div><div class="m"></div></div>
+    <div class="slot" id="slot-labels"><span class="x" data-k="labels" title="Verwijderen">✕</span><div class="t"><span class="num">2</span>Akeneo export – labels</div><div class="f">Nog niet geladen</div><div class="m"></div></div>
+    <div class="slot" id="slot-codes"><span class="x" data-k="codes" title="Verwijderen">✕</span><div class="t"><span class="num">3</span>Akeneo export – codes</div><div class="f">Nog niet geladen</div><div class="m"></div></div>
+  </div>
+  <div id="loadmsg"></div>
+</div>
+
+<div class="card hidden" id="result">
+  <h2>Resultaat</h2>
+  <div class="stats" id="stats"></div>
+  <div id="resmsg"></div>
+  <div class="actions">
+    <button class="primary" id="btnDownload">⬇ Download Akeneo import (.xlsx)</button>
+    <button id="btnCopy">Codes kopiëren</button>
+    <button id="btnReset">Opnieuw beginnen</button>
+    <span id="copied"></span>
+  </div>
+</div>
+
+<div class="card hidden" id="details">
+  <h2>Details</h2>
+  <div class="tabs" id="tabs"></div>
+  <div class="tablewrap" id="tablewrap"></div>
+</div>
+</main>
+<footer>Klium · alles wordt lokaal in je browser verwerkt – er wordt niets geüpload</footer>
+
+<script id="core">
+const DEXIS_PREFIX = "https://cdn.dexis.be/images/";
+const ASSET_FAMILY = "images";
+const IMAGE_COLS = ["images", "[images]", "afbeeldingen", "bilder", "images_wf"];
+const CODE_RE = /^[0-9a-f]{32}$/;
+
+const normSku = s => String(s ?? "").trim().replace(/^0+/, "");
+const splitList = v => String(v ?? "").split(",").map(s => s.trim()).filter(Boolean);
+const findCol = (header, names) => header.find(h => names.includes(String(h).trim().toLowerCase()));
+
+function labelFromUrl(url) {
+  const parts = String(url).split("?")[0].replace(/\/+$/, "").split("/");
+  return parts.length >= 2 ? parts[parts.length - 2] : "";
+}
+
+/** Classify a parsed table: {kind:'dexis'|'labels'|'codes', ...} */
+function classify(name, header, rows) {
+  if (header.includes("Resource_URL")) {
+    return { kind: "dexis", name, rows };
+  }
+  const skuCol = findCol(header, ["sku", "[sku]"]);
+  const imgCol = findCol(header, IMAGE_COLS);
+  if (!skuCol || !imgCol) {
+    throw new Error(`${name}: niet herkend. Verwacht 'Resource_URL' (Dexis) of 'sku' + afbeeldingenkolom (${IMAGE_COLS.join(", ")}).`);
+  }
+  const perSku = new Map();
+  const values = [];
+  for (const r of rows) {
+    const sku = String(r[skuCol] ?? "").trim();
+    if (!sku) continue;
+    const items = splitList(r[imgCol]);
+    perSku.set(sku, items);
+    values.push(...items);
+  }
+  const isCodes = values.length > 0 && values.every(v => CODE_RE.test(v));
+  return { kind: isCodes ? "codes" : "labels", name, column: imgCol, perSku, valueCount: values.length };
+}
+
+function processFiles(dexis, labels, codes) {
+  const bySku = new Map();      // "sku|label" -> code
+  const byLabel = new Map();    // label -> Set(code)
+  const skuIssues = [];
+  const codesNorm = new Map([...codes.perSku].map(([k, v]) => [normSku(k), v]));
+  const labelsNorm = new Set([...labels.perSku.keys()].map(normSku));
+
+  for (const [sku, lbls] of labels.perSku) {
+    const cds = codesNorm.get(normSku(sku));
+    if (!cds) { skuIssues.push([sku, "SKU niet gevonden in codes-export", lbls.length, 0]); continue; }
+    if (cds.length !== lbls.length) {
+      skuIssues.push([sku, "Aantal labels ≠ aantal codes → volgorde onbetrouwbaar, SKU overgeslagen", lbls.length, cds.length]);
+      continue;
+    }
+    lbls.forEach((l, i) => {
+      bySku.set(normSku(sku) + "|" + l, cds[i]);
+      if (!byLabel.has(l)) byLabel.set(l, new Set());
+      byLabel.get(l).add(cds[i]);
+    });
+  }
+  for (const [sku, cds] of codes.perSku) {
+    if (!labelsNorm.has(normSku(sku))) skuIssues.push([sku, "SKU niet gevonden in labels-export", 0, cds.length]);
+  }
+
+  const dexisRows = dexis.rows.filter(r => String(r.Resource_URL || "").startsWith(DEXIS_PREFIX));
+  const skipped = dexis.rows.length - dexisRows.length;
+  const matched = [], notFound = [], seen = new Set(), importCodes = [], seenCodes = new Set();
+
+  for (const r of dexisRows) {
+    const sku = String(r.SKU ?? "").trim();
+    const label = labelFromUrl(r.Resource_URL);
+    const key = normSku(sku) + "|" + label;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    let code = bySku.get(key), how = "SKU + label";
+    if (!code) {
+      const cands = byLabel.get(label);
+      if (cands && cands.size === 1) { code = [...cands][0]; how = "label (andere SKU)"; }
+      else if (cands && cands.size > 1) { notFound.push([sku, label, "Label heeft meerdere codes", r.Resource_URL]); continue; }
+    }
+    if (!code) {
+      const reason = codesNorm.has(normSku(sku)) || labelsNorm.has(normSku(sku))
+        ? "Label niet gevonden bij deze SKU" : "SKU niet in Akeneo exports";
+      notFound.push([sku, label, reason, r.Resource_URL]);
+      continue;
+    }
+    matched.push([sku, label, code, how]);
+    if (!seenCodes.has(code)) { seenCodes.add(code); importCodes.push(code); }
+  }
+  const dexisSkus = new Set(dexisRows.map(r => normSku(r.SKU)));
+  return { total: dexis.rows.length, dexisCount: dexisRows.length, skipped, dexisSkuCount: dexisSkus.size,
+           matched, notFound, skuIssues, importCodes };
+}
+
+function readTable(name, arrayBuffer) {
+  const isCsv = /\.csv$/i.test(name);
+  const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: "array", raw: isCsv, codepage: 65001 });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
+  const header = (aoa[0] || []).map(h => String(h).trim());
+  const rows = aoa.slice(1)
+    .filter(r => r.some(v => String(v).trim() !== ""))
+    .map(r => Object.fromEntries(header.map((h, i) => [h, String(r[i] ?? "").trim()])));
+  return { header, rows };
+}
+</script>
+
+<script>
+const state = { dexis: null, labels: null, codes: null };
+let result = null, activeTab = 0;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const drop = $("drop"), picker = $("picker");
+drop.onclick = () => picker.click();
+picker.onchange = e => { handleFiles(e.target.files); picker.value = ""; };
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => handleFiles(e.dataTransfer.files));
+// Avoid the browser opening a file that is dropped next to the drop zone
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => { e.preventDefault(); if (e.target !== drop && !drop.contains(e.target)) handleFiles(e.dataTransfer.files); });
+
+document.querySelectorAll(".slot .x").forEach(x => x.onclick = () => { state[x.dataset.k] = null; refresh(); });
+$("btnReset").onclick = () => { state.dexis = state.labels = state.codes = null; refresh(); };
+$("btnDownload").onclick = download;
+$("btnCopy").onclick = () => {
+  navigator.clipboard.writeText(result.importCodes.join("\n"));
+  $("copied").textContent = `${result.importCodes.length} codes gekopieerd`;
+  setTimeout(() => $("copied").textContent = "", 2500);
+};
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList); // FileList is cleared after the event/picker reset
+  const errors = [];
+  for (const f of files) {
+    try {
+      if (!/\.(csv|xlsx|xls)$/i.test(f.name)) throw new Error(`${f.name}: enkel .csv of .xlsx toegelaten.`);
+      const { header, rows } = readTable(f.name, await f.arrayBuffer());
+      const c = classify(f.name, header, rows);
+      if (c.kind === "dexis" && !/\.csv$/i.test(f.name)) throw new Error(`${f.name}: Dexis failures moet een .csv zijn.`);
+      state[c.kind] = c;
+    } catch (e) { errors.push(e.message); }
+  }
+  refresh(errors);
+}
+
+function refresh(errors = []) {
+  const meta = {
+    dexis: s => `${s.rows.length} rijen, ${s.rows.filter(r => String(r.Resource_URL).startsWith(DEXIS_PREFIX)).length} van cdn.dexis.be/images`,
+    labels: s => `${s.perSku.size} SKU's · ${s.valueCount} labels (kolom "${s.column}")`,
+    codes: s => `${s.perSku.size} SKU's · ${s.valueCount} codes (kolom "${s.column}")`,
+  };
+  for (const k of ["dexis", "labels", "codes"]) {
+    const el = $("slot-" + k), s = state[k];
+    el.classList.toggle("ok", !!s);
+    el.querySelector(".f").textContent = s ? s.name : "Nog niet geladen";
+    el.querySelector(".m").textContent = s ? meta[k](s) : "";
+  }
+  const missing = ["dexis", "labels", "codes"].filter(k => !state[k]);
+  let html = errors.map(e => `<div class="msg err">${esc(e)}</div>`).join("");
+  if (missing.length && missing.length < 3) {
+    const names = { dexis: "Dexis CDN failures", labels: "Akeneo export met labels", codes: "Akeneo export met codes" };
+    html += `<div class="msg info">Nog nodig: ${missing.map(m => names[m]).join(", ")}</div>`;
+  }
+  $("loadmsg").innerHTML = html;
+
+  if (missing.length) { result = null; $("result").classList.add("hidden"); $("details").classList.add("hidden"); return; }
+  try {
+    result = processFiles(state.dexis, state.labels, state.codes);
+    renderResult();
+  } catch (e) {
+    $("loadmsg").innerHTML += `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+function renderResult() {
+  const r = result;
+  $("stats").innerHTML = [
+    ["first", r.dexisCount, "Dexis images", `${r.skipped} overgeslagen (cloudfront)`],
+    ["", r.dexisSkuCount, "SKU's in failures", `${r.matched.length + r.notFound.length} unieke labels`],
+    ["g", r.importCodes.length, "Codes in import", "klaar voor Akeneo"],
+    [r.notFound.length ? "r" : "g", r.notFound.length, "Niet gevonden", r.notFound.length ? "zie tab Niet gevonden" : "alles gematcht"],
+    [r.skuIssues.length ? "o" : "g", r.skuIssues.length, "SKU problemen", r.skuIssues.length ? "zie tab SKU problemen" : "geen"],
+  ].map(([c, n, l, s]) => `<div class="stat ${c}"><div class="n">${n}</div><div class="l">${l}</div><div class="s">${s}</div></div>`).join("");
+
+  let msg = "";
+  if (!r.importCodes.length) msg += `<div class="msg err">Geen enkele code gevonden – controleer of de Akeneo exports de SKU's uit de failures bevatten.</div>`;
+  if (r.notFound.length) msg += `<div class="msg warn">${r.notFound.length} label(s) niet gevonden. Exporteer deze SKU's ook in Akeneo en sleep de nieuwe exports opnieuw in (zie tab "Niet gevonden").</div>`;
+  if (r.skuIssues.length) msg += `<div class="msg warn">${r.skuIssues.length} SKU probleem/problemen – zie tab "SKU problemen".</div>`;
+  if (r.importCodes.length && !r.notFound.length && !r.skuIssues.length) msg += `<div class="msg ok">✔ Alles gevonden – download het importbestand.</div>`;
+  $("resmsg").innerHTML = msg;
+  $("btnDownload").disabled = $("btnCopy").disabled = !r.importCodes.length;
+
+  $("result").classList.remove("hidden");
+  $("details").classList.remove("hidden");
+  renderTabs();
+}
+
+function tabsDef() {
+  return [
+    { name: `Import (${result.importCodes.length})`, head: ["assetFamilyIdentifier", "code", "to_process"],
+      rows: result.importCodes.map(c => [ASSET_FAMILY, c, "YES"]) },
+    { name: `Gematcht (${result.matched.length})`, head: ["SKU", "Label", "Code", "Gevonden via"], rows: result.matched },
+    { name: `Niet gevonden (${result.notFound.length})`, head: ["SKU", "Label", "Reden", "Resource_URL"], rows: result.notFound },
+    { name: `SKU problemen (${result.skuIssues.length})`, head: ["SKU", "Probleem", "# labels", "# codes"], rows: result.skuIssues },
+  ];
+}
+
+function renderTabs() {
+  const tabs = tabsDef();
+  $("tabs").innerHTML = tabs.map((t, i) => `<div class="tab ${i === activeTab ? "active" : ""}" data-i="${i}">${t.name}</div>`).join("");
+  $("tabs").querySelectorAll(".tab").forEach(el => el.onclick = () => { activeTab = +el.dataset.i; renderTabs(); });
+  const t = tabs[activeTab];
+  $("tablewrap").innerHTML = t.rows.length
+    ? `<table><thead><tr>${t.head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+        t.rows.map(r => `<tr>${r.map((v, i) => cell(t.head[i], v)).join("")}</tr>`).join("")
+      }</tbody></table>`
+    : `<div class="empty">Geen rijen.</div>`;
+}
+
+function cell(col, v) {
+  if (col === "Resource_URL") return `<td class="url" title="${esc(v)}"><a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a></td>`;
+  const mono = ["code", "Code", "SKU", "Label"].includes(col) ? "mono" : "";
+  return `<td class="${mono}">${esc(v)}</td>`;
+}
+
+function download() {
+  const ws = XLSX.utils.aoa_to_sheet([["assetFamilyIdentifier", "code", "to_process"],
+    ...result.importCodes.map(c => [ASSET_FAMILY, c, "YES"])]);
+  ws["!cols"] = [{ wch: 22 }, { wch: 36 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+  const base = state.dexis.name.replace(/\.csv$/i, "");
+  XLSX.writeFile(wb, `${base}_akeneo_asset_import.xlsx`);
+}
+</script>
+</body>
+</html>
