@@ -190,8 +190,27 @@ function classify(name, header, rows) {
     perSku.set(sku, items);
     values.push(...items);
   }
-  const isCodes = values.length > 0 && values.every(v => CODE_RE.test(v));
-  return { kind: isCodes ? "codes" : "labels", name, column: imgCol, perSku, valueCount: values.length };
+  const hexRatio = values.length ? values.filter(v => CODE_RE.test(v)).length / values.length : 0;
+  // Technical export uses the attribute code ("images"); the label export uses a translated name ("Afbeeldingen").
+  const col = String(imgCol).trim();
+  let kind;
+  if (col === "images" || col === "[images]") kind = "codes";
+  else if (col.toLowerCase() === "afbeeldingen" || col.toLowerCase() === "bilder") kind = "labels";
+  else kind = hexRatio >= 0.5 ? "codes" : "labels";
+  return { kind, name, column: imgCol, perSku, valueCount: values.length, hexRatio };
+}
+
+/** If both Akeneo exports ended up in the same slot, the one with the most hex codes is the codes export. */
+function assignAkeneo(state, c) {
+  const other = state.labels || state.codes;
+  const otherKind = state.labels ? "labels" : "codes";
+  if (other && other.name !== c.name && !state[c.kind === "labels" ? "codes" : "labels"] && c.kind === otherKind) {
+    const [codes, labels] = c.hexRatio > other.hexRatio ? [c, other] : [other, c];
+    codes.kind = "codes"; labels.kind = "labels";
+    state.codes = codes; state.labels = labels;
+    return;
+  }
+  state[c.kind] = c;
 }
 
 function processFiles(dexis, labels, codes) {
@@ -296,7 +315,7 @@ async function handleFiles(fileList) {
       const { header, rows } = readTable(f.name, await f.arrayBuffer());
       const c = classify(f.name, header, rows);
       if (c.kind === "dexis" && !/\.csv$/i.test(f.name)) throw new Error(`${f.name}: Dexis failures moet een .csv zijn.`);
-      state[c.kind] = c;
+      if (c.kind === "dexis") state.dexis = c; else assignAkeneo(state, c);
     } catch (e) { errors.push(e.message); }
   }
   refresh(errors);
